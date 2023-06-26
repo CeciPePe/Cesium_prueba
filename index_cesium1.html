@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Include the CesiumJS JavaScript and CSS files -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.105.1/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.105.1/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script defer src="https://use.fontawesome.com/releases/v5.0.0/js/all.js"></script>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <title>Cesium Interface</title>
+  <base href="https://limyyj.github.io/cesium-cityjson/">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script defer src="https://use.fontawesome.com/releases/v5.0.0/js/all.js"></script>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" type="text/css" href="./cesium.css">
+</head>
+<body style="overflow: hidden;margin:0px;width: 100%;height: 100%;">
+  <div id="cesiumContainer" class = "fullSize"></div>
+  <div id = "menu" class = "dropDown"></div>
+  <script>
+    //////////////////////////////////////////////////////////////////////////
+    // Creating the CesiumJS world viewer
+    //////////////////////////////////////////////////////////////////////////
+    //Cesium.Ion.defaultAccessToken = '';
+    var viewer = new Cesium.Viewer('cesiumContainer', {
+        //selectionIndicator: false,
+        animation : false,
+        homeButton : false,
+        baseLayerPicker : false,
+        infoBox : false,
+        sceneModePicker : false,
+        timeline : false,
+        navigationInstructionsInitiallyVisible : false,
+        navigationHelpButton : false,
+    });
+    //////////////////////////////////////////////////////////////////////////
+    // Loading Terrain
+    //////////////////////////////////////////////////////////////////////////
+    viewer.terrainProvider = Cesium.createWorldTerrain({
+         requestWaterMask : true, // required for water effects
+         requestVertexNormals : true // required for terrain lighting
+     });
+    //////////////////////////////////////////////////////////////////////////
+    // View camera to Palma
+    //////////////////////////////////////////////////////////////////////////
+    viewer.camera.flyTo({
+      destination : Cesium.Cartesian3.fromDegrees(2.668884, 39.567960, 400),
+      orientation : {
+        heading : Cesium.Math.toRadians(0.0),
+        pitch : Cesium.Math.toRadians(-15.0),
+      }
+    });
+
+    //////////////////////////////////////////////////////////////////////////
+    //Create button that will upload file/connect to PostgreSQL
+    //////////////////////////////////////////////////////////////////////////
+    window.viewer = viewer;
+    const toolbar = document.querySelector("div.cesium-viewer-toolbar");
+    const modeButton = document.querySelector("span.cesium-sceneModePicker-wrapper");
+    const myButton = document.createElement("button");
+    myButton.classList.add("cesium-button", "cesium-toolbar-button");
+    myButton.innerHTML = "Geom";
+    toolbar.insertBefore(myButton, modeButton);
+
+    //////////////////////////////////////////////////////////////////////////
+    // Loading Imagery 
+    //////////////////////////////////////////////////////////////////////////
+    
+    /*
+    function loadGeoserver (){
+      const imageryLayer = viewer.imageryLayers.addImageryProvider(
+        new Cesium.WebMapServiceImageryProvider({
+            url : 'http://localhost:8081/geoserver/CITYDB_geom/wms?service=WMS&version=1.1.0&request=GetMap&layers=CITYDB_geom%3Atable&bbox=471082.15625%2C4379564.5%2C472188.0%2C4380224.0&width=768&height=458&srs=EPSG%3A25831&styles=&format=application/openlayers',
+            layers : 'CITYDB_geom:table',  // comma separated listing
+            parameters: {
+              format : 'img/png; mode=8bit',
+              transparent: true,
+              tiled: true,
+              enablePickFeatures: true
+
+            },
+            crs: 'EPSG:25831',
+        })
+
+      );
+    } //gml only 50 buildings exported, can be seen in qgis
+    */
+     //////////////////////////////////////////////////////////////////////////
+    // Loading geojson from geoserver
+    //////////////////////////////////////////////////////////////////////////
+    /*
+    function loadGeoserver (){
+      var geoserverurl= 'http://localhost:8081/geoserver/web'
+      var geojsonurl= 'http://localhost:8081/geoserver/CITYDB_geom/ows?service=WFS&version=1.0.0&request=GetFeature&typeName=CITYDB_geom%3Atable&maxFeatures=50&outputFormat=application%2Fjson'
+      
+      var dataSource = new Cesium.GeoJsonDataSource();
+      dataSource.load(geojsonurl, {
+        sourceUri: geoserverurl
+      }).then(function () {
+        viewer.dataSources.add(dataSource);
+      }).otherwise(function (error) {
+        console.error('Error loading GeoJSON:', error);
+      });
+    }
+    */
+
+    //////////////////////////////////////////////////////////////////////////
+    //Fecth data from postgresql WKB 
+
+    //////////////////////////////////////////////////////////////////////////
+    /*
+    const wicket = require('wicket')
+    function loadGeometry(){
+      return fetch('http://localhost:8082/geometry')
+        .then((response)=> response.json())
+        .then((geometry)=>{
+          const wkbGeometry = geometry;
+          const parsedGeometry = wicket.Geometry.parse(wkbGeometry);
+          const geoJSON = parsedGeometry.toGeoJSON();
+          console.log('GeoJSON:', geoJSON);
+          dataSource.load(geoJSON)
+          viewer.dataSources.add(dataSource)
+          return geoJSON
+        })
+        .catch((error)=> {
+          console.error('Error', error);
+          throw error;
+        });
+    }
+    */
+    //////////////////////////////////////////////////////////////////////////
+    //WKB --> GeoJSON
+    //////////////////////////////////////////////////////////////////////////
+    const fetch = require('node-fetch');
+    const pygeos = require('pygeos');
+    const fs = require('fs')
+    fetch('http://localhost:8082/geometry')
+        .then(response => response.json())
+        .then(geometryData =>{
+            const geometries = [];
+            geometryData.forEach(wkb =>{
+                const geometry = pygeos.from_wkb(Buffer.from(wkb.geom_visual, 'hex'));
+                geometries.push(pygeos.to_wkt(geometry));
+            });
+            const geojsonData = {
+                type:'FeatureCollection',
+                name: 'geojson',
+                crs :{
+                    type: 'name',
+                    properties:{
+                        name: 'urn:ogc:def:crs:OGC:1.3:CRS84'
+                    }
+                },
+                features:[],
+            };
+            for(let i = 0; i<geometries.length; i++){
+                const wkt = geometries[i];
+                const wkb = geometryData[i];
+                const feature = {
+                    type: 'Feature',
+                    properties: {
+                        refcat_visual: wkb.refcat_visual,
+                        id: wkb.id,
+                    },
+                    geometry:{
+                        type: 'MultiPolygon',
+                        coordinates: [wkt],
+                    },
+                };
+                geojsonData.features.push(feature);
+            }
+            const jsonString= JSON.stringigy(geojsonData);
+            console.log(jsonString);
+        })
+        .catch(error =>{
+            console.error('Error', error);
+        });
+
+    //////////////////////////////////////////////////////////////////////////
+    //Fecth data from GEOJSON
+    //////////////////////////////////////////////////////////////////////////
+    
+    function loadGeometry(geojsonData){
+      const dataSource = Cesium.GeoJsonDataSource.load(geojsonData);
+      viewer.dataSources.add(dataSource);
+      viewer.zoomTo(dataSource);
+    }
+    myButton.addEventListener('click', function(){
+      loadGeometry(geojsonData);
+    });
+
+
+    
+
+  </script>
+  <script> src = "server.js"</script>
+  <script>src = "server.py"</script>
+</body>
+ </div>
+</body>
+</html>

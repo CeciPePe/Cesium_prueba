@@ -1,0 +1,17 @@
+.cesium-button {
+    padding: 8px 12px;
+    font-size: 14px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  
+  .cesium-button:hover {
+    background-color: #45a049;
+  }
+  
+  .cesium-toolbar-button {
+    margin-right: 8px;
+  }
